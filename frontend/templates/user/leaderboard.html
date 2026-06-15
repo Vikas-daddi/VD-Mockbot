@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header"><h2>🏆 Top Performers</h2></div>
+    <div class="card-body">
+        <table class="table table-striped">
+            <thead>
+                <tr><th>Rank</th><th>Username</th><th>Avg Score (out of 5)</th><th>Completed Sessions</th></tr>
+            </thead>
+            <tbody>
+                {% for user in leaders %}
+                <tr>
+                    <td>{{ loop.index }}{% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% endif %}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ "%.2f"|format(user.avg_score or 0) }}</td>
+                    <td>{{ user.session_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

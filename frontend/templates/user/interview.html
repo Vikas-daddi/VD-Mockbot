@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Live Interview{% endblock %}
+{% block extra_css %}
+<style>
+    #questionBox { background: #f8f9fa; padding: 15px; border-left: 4px solid #0d6efd; margin: 15px 0; }
+    #feedback { background: #e9ecef; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
+    .timer { font-size: 1.2rem; font-weight: bold; color: #dc3545; }
+    .progress-bar { transition: width 0.3s; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3>AI Mock Interview</h3>
+        <div class="progress">
+            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="setupView">
+            <p>Your session is ready. Click below to start.</p>
+            <button id="startBtn" class="btn btn-primary">Start Interview</button>
+        </div>
+        <div id="interviewView" style="display:none;">
+            <div id="questionCounter" class="mb-2"></div>
+            <div id="questionBox"></div>
+            <div class="timer" id="timerDisplay"></div>
+            <div class="mt-3">
+                <label>Your Answer</label>
+                <textarea id="answer" rows="5" class="form-control"></textarea>
+                <div class="mt-2">
+                    <button id="submitBtn" class="btn btn-success">Submit Answer</button>
+                    <button id="voiceBtn" class="btn btn-secondary">🎤 Speak</button>
+                    <button id="endSessionBtn" class="btn btn-danger">End Session Early</button>
+                </div>
+            </div>
+        </div>
+        <div id="completionView" style="display:none;">
+            <h4>🎉 Interview Completed!</h4>
+            <p id="finalMsg"></p>
+            <a href="{{ url_for('user.dashboard') }}" class="btn btn-primary">Go to Dashboard</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    let sessionId = new URLSearchParams(window.location.search).get('session_id');
+    let currentQuestion = '';
+    let timerInterval = null;
+    let timerSeconds = 60;
+    let timerEnabled = false;
+    let recognition = null;
+
+    const startBtn = document.getElementById('startBtn');
+    const interviewDiv = document.getElementById('interviewView');
+    const completionDiv = document.getElementById('completionView');
+    const setupDiv = document.getElementById('setupView');
+    const questionCounter = document.getElementById('questionCounter');
+    const questionBox = document.getElementById('questionBox');
+    const answerText = document.getElementById('answer');
+    const submitBtn = document.getElementById('submitBtn');
+    const voiceBtn = document.getElementById('voiceBtn');
+    const progressBar = document.getElementById('progressBar');
+    const endSessionBtn = document.getElementById('endSessionBtn');
+
+    if (!sessionId) {
+        alert('No session found. Please start a new interview.');
+        window.location.href = '/user/dashboard';
+    }
+
+    // Timer optional – we can add a toggle but keep simple: user can enable via a checkbox? Add later.
+    // For now, we'll skip timer to reduce complexity, but you can add it.
+
+    async function loadNextQuestion() {
+        const res = await fetch(`/user/api/next_question?session_id=${sessionId}`);
+        const data = await res.json();
+        if (data.completed) {
+            await fetchFinalSummary();
+            return;
+        }
+        currentQuestion = data.question;
+        questionBox.innerText = currentQuestion;
+        questionCounter.innerText = `Question ${data.current_q} of ${data.total_q}`;
+        const percent = (data.current_q / data.total_q) * 100;
+        progressBar.style.width = `${percent}%`;
+        progressBar.innerText = `${Math.round(percent)}%`;
+        answerText.value = '';
+        document.getElementById('feedback').innerHTML = ''; // clear if any
+    }
+
+    async function submitAnswer() {
+        const answer = answerText.value.trim();
+        if (!answer) {
+            alert('Please provide an answer.');
+            return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Evaluating...';
+        const res = await fetch('/user/api/submit_answer', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_id: sessionId,
+                answer: answer,
+                question: currentQuestion
+            })
+        });
+        const data = await res.json();
+        if (data.completed) {
+            await fetchFinalSummary();
+        } else {
+            // Show feedback momentarily then load next
+            alert(data.feedback); // or display in a div
+            await loadNextQuestion();
+        }
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Submit Answer';
+    }
+
+    async function fetchFinalSummary() {
+        const res = await fetch(`/user/session_summary/${sessionId}`);
+        if (res.ok) {
+            const html = await res.text();
+            document.body.innerHTML = html;
+        } else {
+            completionDiv.style.display = 'block';
+            completionDiv.innerText = 'Session completed! Check dashboard.';
+        }
+    }
+
+    startBtn.onclick = async () => {
+        setupDiv.style.display = 'none';
+        interviewDiv.style.display = 'block';
+        await loadNextQuestion();
+    };
+    submitBtn.onclick = submitAnswer;
+
+    // Voice input
+    if ('webkitSpeechRecognition' in window) {
+        const SpeechRecognition = window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.onresult = (e) => {
+            answerText.value = e.results[0][0].transcript;
+        };
+        voiceBtn.onclick = () => recognition.start();
+    } else {
+        voiceBtn.disabled = true;
+    }
+
+    // End early
+    endSessionBtn.onclick = async () => {
+        if (confirm('End this session? Your progress so far will be saved.')) {
+            window.location.href = '/user/dashboard';
+        }
+    };
+</script>
+{% endblock %}

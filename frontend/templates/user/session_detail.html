@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Session Report{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3>{{ session.title }}</h3>
+        <p>Started: {{ session.started_at.strftime('%Y-%m-%d %H:%M') }} | Completed: {{ session.completed_at.strftime('%Y-%m-%d %H:%M') if session.completed_at else 'In progress' }}</p>
+        <p>Role: {{ session.role }} | Difficulty: {{ session.difficulty }} | Category: {{ session.category }}</p>
+        <p>Final Average Score: {{ "%.2f"|format(session.final_avg_score) }} / 5</p>
+        <p>{{ session.final_feedback }}</p>
+    </div>
+    <div class="card-body">
+        <h4>Question & Answer Details</h4>
+        {% for ans in answers %}
+            <div class="border p-3 mb-3">
+                <strong>Q{{ loop.index }}:</strong> {{ ans.question }}<br>
+                <strong>Your answer:</strong> {{ ans.answer }}<br>
+                <strong>Feedback:</strong> {{ ans.feedback }}<br>
+                <strong>Scores:</strong> Relevance {{ ans.scores.relevance }}/5, Clarity {{ ans.scores.clarity }}/5, Correctness {{ ans.scores.correctness }}/5
+            </div>
+        {% endfor %}
+        <a href="{{ url_for('user.dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+        <button onclick="exportSession()" class="btn btn-secondary">Export as JSON</button>
+    </div>
+</div>
+
+<script>
+function exportSession() {
+    const data = {{ answers|tojson }};
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'session_{{ session.id }}.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

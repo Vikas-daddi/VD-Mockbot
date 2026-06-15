@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}My Dashboard{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Welcome, {{ current_user.username }}!</h2>
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#newSessionModal">+ New Mock Interview</button>
+</div>
+
+<div class="card">
+    <div class="card-header">Your Interview Sessions</div>
+    <div class="card-body">
+        {% if sessions %}
+            <table class="table table-striped">
+                <thead>
+                    <tr><th>Date</th><th>Title</th><th>Questions</th><th>Avg Score</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for s in sessions %}
+                    <tr>
+                        <td>{{ s.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ s.title }}</td>
+                        <td>{{ s.current_question_index }} / {{ s.question_count }}</td>
+                        <td>{{ "%.1f"|format(s.final_avg_score) if s.completed_at else "In progress" }}</td>
+                        <td>{% if s.completed_at %}✅ Completed{% else %}🟡 Active{% endif %}</td>
+                        <td>
+                            <a href="{{ url_for('user.session_summary', session_id=s.id) }}" class="btn btn-sm btn-info">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No sessions yet. Click "New Mock Interview" to start practicing.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal for new session -->
+<div class="modal fade" id="newSessionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Start a New Mock Interview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label>Job Role</label>
+        <input type="text" id="modalRole" class="form-control" value="Python Developer">
+        <label class="mt-2">Difficulty</label>
+        <select id="modalDifficulty" class="form-select">
+            <option>Easy</option>
+            <option selected>Medium</option>
+            <option>Hard</option>
+        </select>
+        <label class="mt-2">Category</label>
+        <select id="modalCategory" class="form-select">
+            <option>General</option>
+            <option>Data Structures</option>
+            <option>Algorithms</option>
+            <option>System Design</option>
+            <option>Databases</option>
+        </select>
+        <label class="mt-2">Number of Questions</label>
+        <input type="number" id="modalQCount" class="form-control" value="5" min="1" max="20">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmStart">Start Interview</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('confirmStart').onclick = async () => {
+    const role = document.getElementById('modalRole').value;
+    const difficulty = document.getElementById('modalDifficulty').value;
+    const category = document.getElementById('modalCategory').value;
+    const question_count = document.getElementById('modalQCount').value;
+    const res = await fetch('/user/start_session', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({role, difficulty, category, question_count})
+    });
+    const data = await res.json();
+    if (data.session_id) {
+        window.location.href = `/user/interview?session_id=${data.session_id}`;
+    } else {
+        alert('Failed to start session');
+    }
+};
+</script>
+{% endblock %}
