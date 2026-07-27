@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import db, User, Role
+
+# Use relative imports (since this file is inside the backend package)
+from .models import db, User, Role
+from .email_utils import send_reset_email
+
 from datetime import datetime, timedelta
-from email_utils import send_reset_email
-import traceback
 
 bcrypt = Bcrypt()
 auth_bp = Blueprint('auth', __name__)
