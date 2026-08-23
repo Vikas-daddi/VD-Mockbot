@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
       "source": "/auth/(.*)",
