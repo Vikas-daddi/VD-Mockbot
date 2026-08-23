@@ -32,19 +32,22 @@ def create_app():
     app.register_blueprint(admin_bp, url_prefix='/admin')
     
     with app.app_context():
-        db.create_all()
-        if not Role.query.first():
-            db.session.add(Role(name='admin'))
-            db.session.add(Role(name='user'))
-            db.session.commit()
-        if not User.query.filter_by(username='admin').first():
-            admin_role = Role.query.filter_by(name='admin').first()
-            hashed = bcrypt.generate_password_hash('admin123').decode('utf-8')
-            admin = User(username='admin', email='admin@example.com', password_hash=hashed, role=admin_role)
-            db.session.add(admin)
-            db.session.commit()
-            print("Default admin created: admin@example.com / admin123")
-    
+        try:
+            db.create_all()
+            if not Role.query.first():
+                db.session.add(Role(name='admin'))
+                db.session.add(Role(name='user'))
+                db.session.commit()
+            if not User.query.filter_by(username='admin').first():
+                admin_role = Role.query.filter_by(name='admin').first()
+                hashed = bcrypt.generate_password_hash('admin123').decode('utf-8')
+                admin = User(username='admin', email='admin@example.com', password_hash=hashed, role=admin_role)
+                db.session.add(admin)
+                db.session.commit()
+                print("Default admin created: admin@example.com / admin123")
+        except Exception as e:
+            print(f"Failed to initialize database: {e}")
+            
     return app
 
 if __name__ == '__main__':
