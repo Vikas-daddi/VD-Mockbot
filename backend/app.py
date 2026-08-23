@@ -4,12 +4,12 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_mail import Mail
 
-# Use absolute imports with 'backend.' prefix
-from backend.config import Config
-from backend.models import db, User, Role
-from backend.auth import auth_bp, bcrypt
-from backend.user import user_bp
-from backend.admin import admin_bp
+# Use relative imports
+from config import Config
+from models import db, User, Role
+from auth import auth_bp, bcrypt
+from user import user_bp
+from admin import admin_bp
 
 def create_app():
     app = Flask(__name__)
