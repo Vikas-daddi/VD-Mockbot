@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, InterviewSession, User
-import requests
-import os
+
+# Use relative imports
+from .models import db, InterviewSession, User
+from .ai_client import generate_question, evaluate_answer
+
 import re
-import json
 from datetime import datetime
 from sqlalchemy import func
 from cachetools import TTLCache
@@ -22,102 +23,9 @@ def extract_scores(feedback_text):
     if cor_match: scores['correctness'] = int(cor_match.group(1))
     return scores
 
-def parse_llm_json(response_text):
-    match = re.search(r'\{.*\}', response_text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except:
-            pass
-    return None
-
-def generate_question(role, difficulty, category, fmt):
-    diff_prompt = {"Easy": "basic", "Medium": "standard", "Hard": "challenging"}.get(difficulty, "standard")
-    cat_part = f" Focus on {category}." if category != "General" else ""
-    
-    if fmt == "MCQ":
-        prompt = (
-            f"You are a technical interviewer. Ask a {diff_prompt} multiple-choice interview question for a {role}. "
-            f"{cat_part} Output ONLY a raw JSON object with exactly three keys: 'question' (string containing the actual question text), "
-            f"'options' (an array of exactly 4 strings for the possible choices, e.g. 'A) ...', 'B) ...'), "
-            f"and 'recommendation' (a string containing a brief hint on how to approach the answer)."
-        )
-    else:
-        prompt = (
-            f"You are a technical interviewer. Ask a {diff_prompt} interview question for a {role}. "
-            f"{cat_part} Keep the question under 30 words. Output ONLY a raw JSON object with exactly two keys: "
-            f"'question' (string containing the actual question text) and 'recommendation' (a string containing a brief hint on what type of answer is expected)."
-        )
-        
-    try:
-        headers = {
-            "Authorization": f"Bearer {os.environ.get('GROQ_API_KEY', 'mock-groq-key')}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama-3.1-70b-versatile",
-            "messages": [{"role": "user", "content": prompt}],
-            "response_format": {"type": "json_object"}
-        }
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=10)
-        res_json = response.json()
-        result = json.loads(res_json["choices"][0]["message"]["content"])
-        
-        if "question" in result and "options" in result:
-            if "recommendation" not in result:
-                result["recommendation"] = "Think carefully about the core concepts."
-            return result
-        elif "question" in result and fmt != "MCQ":
-            return result
-    except Exception as e:
-        print("Groq API error:", e)
-
-    # Ultimate fallback
-    import random
-    r = random.randint(100, 999)
-    if fmt == "MCQ":
-        return {
-            "question": f"What is a core concept of {role} (ID: {r})?",
-            "options": ["A) Inheritance", "B) Polymorphism", "C) Encapsulation", "D) Abstraction"],
-            "recommendation": "Choose the most fundamental OOP concept."
-        }
-    return {
-        "question": f"Explain a core concept of {role} (ID: {r}).",
-        "recommendation": "Provide a clear, concise definition."
-    }
-
-def evaluate_answer_with_ai(question, answer, difficulty, fmt):
-    if fmt == "MCQ":
-        prompt = (
-            f"Evaluate this {difficulty} multiple-choice answer.\nQ: {question}\nSelected Option: {answer}\n"
-            "Did the user pick the right option? Explain briefly why it is correct or incorrect. "
-            "IMPORTANT: You MUST end your response exactly with the following format on 3 separate lines:\n"
-            "Relevance X/5\nClarity Y/5\nCorrectness Z/5"
-        )
-    else:
-        prompt = (
-            f"Evaluate this {difficulty} open-ended answer.\nQ: {question}\nA: {answer}\n"
-            "Provide constructive feedback (2-3 sentences). "
-            "IMPORTANT: You MUST end your response exactly with the following format on 3 separate lines:\n"
-            "Relevance X/5\nClarity Y/5\nCorrectness Z/5"
-        )
-
-    try:
-        headers = {
-            "Authorization": f"Bearer {os.environ.get('GROQ_API_KEY', 'mock-groq-key')}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama-3.1-70b-versatile",
-            "messages": [{"role": "user", "content": prompt}]
-        }
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=10)
-        res_json = response.json()
-        return res_json["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print("Groq evaluate error:", e)
-
-    return "Good attempt, but the AI could not process your answer fully.\n\nRelevance 3/5\nClarity 3/5\nCorrectness 3/5"
+# ========== REMOVE the old Ollama functions – they are now in ai_client.py ==========
+# The functions generate_question() and evaluate_answer_with_ai() are replaced
+# by the imported versions from ai_client.py
 
 @user_bp.route('/api/sessions', methods=['GET'])
 @jwt_required()
@@ -142,16 +50,14 @@ def start_session():
     role = data.get('role', 'Python Developer')
     difficulty = data.get('difficulty', 'Medium')
     category = data.get('category', 'General')
-    fmt = data.get('format', 'Open-Ended')
     question_count = int(data.get('question_count', 5))
     new_session = InterviewSession(
         user_id=user_id,
-        title=f"{role} - {difficulty} ({fmt})",
+        title=f"{role} - {difficulty} - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
         question_count=question_count,
         difficulty=difficulty,
         category=category,
         role=role,
-        format=fmt,
         started_at=datetime.utcnow()
     )
     db.session.add(new_session)
@@ -170,18 +76,14 @@ def next_question():
         return jsonify({'error': 'Session not found'}), 404
     if interview_session.is_complete():
         return jsonify({'completed': True, 'session_id': interview_session.id})
-        
-    cache_key = f"{interview_session.role}_{interview_session.difficulty}_{interview_session.category}_{interview_session.format}_{interview_session.current_question_index}"
+    cache_key = f"{interview_session.role}_{interview_session.difficulty}_{interview_session.category}"
     if cache_key in question_cache:
-        q_data = question_cache[cache_key]
+        question = question_cache[cache_key]
     else:
-        q_data = generate_question(interview_session.role, interview_session.difficulty, interview_session.category, interview_session.format)
-        question_cache[cache_key] = q_data
-        
+        question = generate_question(interview_session.role, interview_session.difficulty, interview_session.category)
+        question_cache[cache_key] = question
     return jsonify({
-        'question': q_data.get('question'),
-        'options': q_data.get('options', []),
-        'recommendation': q_data.get('recommendation', ''),
+        'question': question,
         'current_q': interview_session.current_question_index + 1,
         'total_q': interview_session.question_count,
         'session_id': interview_session.id
@@ -200,7 +102,7 @@ def submit_answer():
     interview_session = InterviewSession.query.filter_by(id=session_id, user_id=user_id).first()
     if not interview_session:
         return jsonify({'error': 'Session not found'}), 404
-    feedback_text = evaluate_answer_with_ai(question, answer, interview_session.difficulty, getattr(interview_session, 'format', 'Open-Ended'))
+    feedback_text = evaluate_answer(question, answer, interview_session.difficulty)  # ← uses imported function
     scores = extract_scores(feedback_text)
     interview_session.add_answer(question, answer, feedback_text, scores)
     if interview_session.is_complete():
@@ -231,7 +133,6 @@ def api_session_data(session_id):
             'role': s.role,
             'difficulty': s.difficulty,
             'category': s.category,
-            'format': getattr(s, 'format', 'Open-Ended'),
             'final_avg_score': s.final_avg_score,
             'final_feedback': s.final_feedback
         },

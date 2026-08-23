@@ -48,6 +48,7 @@ class InterviewSession(db.Model):
     difficulty = db.Column(db.String(20), default="Medium")
     category = db.Column(db.String(50), default="General")
     role = db.Column(db.String(100), default="Python Developer")
+    format = db.Column(db.String(20), default="Open-Ended")
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
     answers_data = db.Column(db.Text, default='[]')

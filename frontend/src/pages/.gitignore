@@ -17,3 +17,7 @@ frontend/.env
 Thumbs.db
 desktop.ini
 *.log
+
+OllamaSetup.exe
+frontend/node_modules/
+instance/*.db

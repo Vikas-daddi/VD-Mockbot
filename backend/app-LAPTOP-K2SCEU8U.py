@@ -37,7 +37,7 @@ def create_app():
             db.session.add(Role(name='admin'))
             db.session.add(Role(name='user'))
             db.session.commit()
-        if not User.query.filter_by(username='admin').first():
+        if not User.query.filter_by(email='admin@example.com').first():
             admin_role = Role.query.filter_by(name='admin').first()
             hashed = bcrypt.generate_password_hash('admin123').decode('utf-8')
             admin = User(username='admin', email='admin@example.com', password_hash=hashed, role=admin_role)
